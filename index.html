@@ -123,6 +123,14 @@ button:focus-visible, summary:focus-visible, input:focus-visible { outline: 3px 
 .card.black { color: var(--suit-black); }
 .card.sel { transform: translateY(-7px); outline: 3px solid var(--accent); outline-offset: 1px; }
 .card:disabled { cursor: default; }
+.card[data-act="pick"], .card[data-act="unplace"]:not(:disabled) { cursor: grab; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.card.dragging { opacity: 0.3; }
+.drag-ghost { position: fixed; left: 0; top: 0; z-index: 50; pointer-events: none; display: flex; gap: 4px; will-change: transform; }
+.drag-ghost .card { transform: rotate(-4deg); box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4); cursor: grabbing; }
+.drop-zone { border: 2px dashed transparent; border-radius: 12px; transition: border-color 0.1s ease, background-color 0.1s ease; }
+.drop-over { border-color: var(--accent) !important; background-color: rgba(217, 154, 30, 0.14) !important; }
+.drop-bad { border-color: var(--bad) !important; background-color: rgba(184, 53, 42, 0.18) !important; }
+.tray-zone { padding: 8px; margin: -8px; }
 .card.mini { --cw: 34px; border-radius: 5px; cursor: default; }
 .card.mini .r { font-size: 12px; top: 2px; left: 3px; }
 .card.mini .s { font-size: 14px; bottom: 2px; right: 3px; }
@@ -175,7 +183,7 @@ details.rules li { margin-bottom: 4px; }
   .brand h1 { font-size: 26px; }
   .table { padding: 14px; border-radius: 14px; }
 }
-@media (prefers-reduced-motion: reduce) { .card { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .card, .drop-zone { transition: none; } }
 </style>
 </head>
 <body>
@@ -203,7 +211,7 @@ details.rules li { margin-bottom: 4px; }
       <li>When 2 to 4 players are seated, anyone at the table can deal.</li>
       <li>Everyone gets 13 cards. Split them into a <b>Front</b> of 3 cards, a <b>Middle</b> of 5 and a <b>Back</b> of 5.</li>
       <li>The Back must be at least as strong as the Middle, and the Middle at least as strong as the Front. The table won't let you lock in a hand that breaks this.</li>
-      <li>Tap cards to select them, then press <b>Place</b> on a row. Tap a placed card to send it back. <b>Auto-arrange</b> suggests a strong split.</li>
+      <li>Drag cards into a row. On a phone, press and hold a card for a moment, then drag. You can also tap cards to select them and press <b>Place</b>. Drop a card on a card in a full row to swap them. <b>Auto-arrange</b> suggests a strong split.</li>
       <li>When everyone locks in, all hands are revealed and scored.</li>
     </ol>
     <ul>
@@ -362,6 +370,31 @@ function autoArrange(hand) {
     }
   }
   return { front: best.front, mid: best.mid, back: best.back };
+}
+
+// Moves cards into a row (or back to the hand, target "tray"). Dropping one card onto a card
+// in a full row swaps the two. Returns { rows } or { error } and never mutates its input.
+function applyMove(rows, cards, target, swapWith = null) {
+  const next = { front: [...rows.front], mid: [...rows.mid], back: [...rows.back] };
+  const originOf = (card) => ROWS.find((r) => next[r].includes(card)) ?? "tray";
+  if (target !== "tray") {
+    const others = next[target].filter((c) => !cards.includes(c));
+    const room = ROW_SIZE[target] - others.length;
+    if (cards.length > room) {
+      if (cards.length === 1 && swapWith && others.includes(swapWith)) {
+        const from = originOf(cards[0]);
+        if (from !== "tray") next[from] = next[from].filter((c) => c !== cards[0]).concat(swapWith);
+        next[target] = next[target].filter((c) => c !== swapWith).concat(cards[0]);
+        for (const r of ROWS) next[r] = sortCards(next[r]);
+        return { rows: next };
+      }
+      return { error: room ? `${ROW_LABEL[target]} only has room for ${room} more card${room === 1 ? "" : "s"}.` : `${ROW_LABEL[target]} is full. Drop on a card there to swap.` };
+    }
+  }
+  for (const r of ROWS) next[r] = next[r].filter((c) => !cards.includes(c));
+  if (target !== "tray") next[target].push(...cards);
+  for (const r of ROWS) next[r] = sortCards(next[r]);
+  return { rows: next };
 }
 
 // arrangements: { playerId: arrangement | null }. null means the hand fouled.
@@ -571,6 +604,45 @@ const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 5;
 const RETRY_MS = 3000;
 const MAX_RETRIES = 20;
+const CONNECT_TIMEOUT_MS = 20000;
+
+// Connection helpers. STUN lets devices find each other; TURN relays the game data
+// when a network blocks direct connections (common on phone carriers and school Wi-Fi).
+// Uses Metered's free Open Relay. To use your own Metered account instead, paste its
+// credentials URL (https://<app>.metered.live/api/v1/turn/credentials?apiKey=...) below.
+const TURN = {
+  credentialsUrl: "",
+  staticHost: "staticauth.openrelay.metered.ca",
+  staticSecret: "openrelayprojectsecret",
+};
+const STUN_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun.cloudflare.com:3478" }];
+
+// Time-limited TURN credentials (the standard TURN REST scheme: HMAC-SHA1 of "expiry:user").
+async function staticTurnServers() {
+  const username = `${Math.floor(Date.now() / 1000) + 24 * 3600}:pusoy`;
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(TURN.staticSecret), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(username));
+  const credential = btoa(String.fromCharCode(...new Uint8Array(sig)));
+  const h = TURN.staticHost;
+  return [{
+    urls: [`turn:${h}:80`, `turn:${h}:80?transport=tcp`, `turn:${h}:443`, `turns:${h}:443?transport=tcp`],
+    username, credential,
+  }];
+}
+
+let iceServersPromise = null;
+function peerOptions() {
+  iceServersPromise ??= (async () => {
+    try {
+      if (TURN.credentialsUrl) return [...STUN_SERVERS, ...(await (await fetch(TURN.credentialsUrl)).json())];
+      return [...STUN_SERVERS, ...(await staticTurnServers())];
+    } catch {
+      return STUN_SERVERS; // relay unavailable: direct connections still work on most networks
+    }
+  })();
+  return iceServersPromise.then((iceServers) => ({ config: { iceServers } }));
+}
 
 const newCode = () => Array.from(crypto.getRandomValues(new Uint8Array(CODE_LENGTH)), (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
 const normalizeCode = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, CODE_LENGTH);
@@ -586,16 +658,18 @@ const Net = {
   joined: false,
   retries: 0,
   retryTimer: null,
+  attemptTimer: null,
 
   destroy() {
     clearTimeout(this.retryTimer);
+    clearTimeout(this.attemptTimer);
     try { this.peer?.destroy(); } catch { /* already closed */ }
     Object.assign(this, { peer: null, role: null, code: null, table: null, hostConn: null, joined: false, retries: 0 });
     this.conns = new Map();
   },
 
   // ----- Host -----
-  host(code, saved, attempt = 0) {
+  async host(code, saved, attempt = 0) {
     this.destroy();
     this.role = "host";
     this.code = code;
@@ -604,7 +678,9 @@ const Net = {
     this.table.hostId = myId;
     UI.setStatus("connecting", `Opening table ${code}…`);
 
-    const peer = new Peer(PEER_PREFIX + code);
+    const options = await peerOptions();
+    if (this.role !== "host" || this.code !== code) return; // cancelled while loading
+    const peer = new Peer(PEER_PREFIX + code, options);
     this.peer = peer;
     peer.on("open", () => {
       Store.set(KEYS.session, { role: "host", code });
@@ -669,12 +745,15 @@ const Net = {
   },
 
   // ----- Guest -----
-  join(code) {
+  async join(code) {
     this.destroy();
     this.role = "guest";
     this.code = code;
     UI.setStatus("connecting", `Joining table ${code}…`);
-    const peer = new Peer();
+    const options = await peerOptions();
+    if (this.role !== "guest" || this.code !== code) return; // cancelled while loading
+    this.attemptTimer = setTimeout(() => this.scheduleRetry(), CONNECT_TIMEOUT_MS);
+    const peer = new Peer(options);
     this.peer = peer;
     peer.on("open", () => this.connectToHost());
     peer.on("disconnected", () => { if (!peer.destroyed) peer.reconnect(); });
@@ -691,7 +770,14 @@ const Net = {
   connectToHost() {
     const conn = this.peer.connect(PEER_PREFIX + this.code, { reliable: true, serialization: "json" });
     this.hostConn = conn;
-    conn.on("open", () => conn.send({ t: "hello", token: deviceToken(), name: UI.name() }));
+    clearTimeout(this.attemptTimer);
+    this.attemptTimer = setTimeout(() => {
+      if (this.hostConn !== conn || conn.open) return;
+      this.hostConn = null; // ignore this attempt's late close event
+      try { conn.close(); } catch { /* never opened */ }
+      this.scheduleRetry();
+    }, CONNECT_TIMEOUT_MS);
+    conn.on("open", () => { clearTimeout(this.attemptTimer); conn.send({ t: "hello", token: deviceToken(), name: UI.name() }); });
     conn.on("data", (msg) => {
       if (msg?.t === "state") {
         this.joined = true;
@@ -715,7 +801,10 @@ const Net = {
   scheduleRetry() {
     if (this.role !== "guest") return;
     clearTimeout(this.retryTimer);
-    if (!this.joined) { UI.fail(`Couldn't reach table ${this.code}. Check the code, or ask the host to open the page.`); return this.destroy(); }
+    if (!this.joined) {
+      UI.fail(`Couldn't connect to table ${this.code}. If the code is right, a network is probably blocking the connection. Try switching between Wi-Fi and phone data, then join again.`);
+      return this.destroy();
+    }
     if (this.retries++ >= MAX_RETRIES) return UI.fail("Lost the connection to the host. Ask them to keep the page open, then rejoin.");
     UI.setStatus("reconnecting", "Lost the connection to the host. Reconnecting…");
     this.retryTimer = setTimeout(() => { if (this.peer && !this.peer.destroyed) this.connectToHost(); }, RETRY_MS);
@@ -842,7 +931,8 @@ function phaseLabel(v) {
 }
 
 function cardHtml(card, { act, selected, mini, disabled } = {}) {
-  const cls = ["card", isRed(card) ? "red" : "black", selected ? "sel" : "", mini ? "mini" : ""].join(" ");
+  const dragging = !mini && act !== "none" && Drag.state?.active && Drag.state.cards.includes(card);
+  const cls = ["card", isRed(card) ? "red" : "black", selected ? "sel" : "", mini ? "mini" : "", dragging ? "dragging" : ""].join(" ");
   const label = `${rankLabel(card)} of ${SUIT_NAME[card[1]]}`;
   const inner = `<span class="r">${rankLabel(card)}</span><span class="s">${SUIT_SYMBOL[card[1]]}</span>`;
   if (mini) return `<span class="${cls}" role="img" aria-label="${label}">${inner}</span>`;
@@ -932,7 +1022,7 @@ function rowHtml(row, interactive) {
   const body = `<div class="cards">${cards.map((c) => cardHtml(c, { act: "unplace", disabled: !interactive })).join("")}${slots}</div>`;
   if (!interactive) return `<div class="row">${head}${body}</div>`;
   const fits = Math.min(UI.local.selected.length, ROW_SIZE[row] - cards.length);
-  return `<div class="row ${fits ? "target" : ""}">${head}${body}
+  return `<div class="row ${fits ? "target" : ""}" data-drop="${row}">${head}${body}
     <div class="actions"><button class="btn ghost" data-act="place" data-row="${row}" ${fits ? "" : "disabled"}>${fits ? `Place ${fits} card${fits > 1 ? "s" : ""} here` : "Place here"}</button></div></div>`;
 }
 
@@ -951,10 +1041,10 @@ function arrangingHtml(v) {
   const complete = isComplete(rows);
   const foul = complete && isFoul(rows);
   const lockedNames = r.locked.map((p) => nameOf(v, p));
-  return `<div><h2>Round ${r.n} · Arrange your hand</h2><p class="sub">Tap cards to select them, then place them in a row. Tap a placed card to send it back.</p></div>
+  return `<div><h2>Round ${r.n} · Arrange your hand</h2><p class="sub">Drag cards into the rows, or tap to select and press Place. Drag a card back to your hand to remove it.</p></div>
     <div class="rows">${ROWS.map((row) => rowHtml(row, true)).join("")}</div>
     ${foul ? `<div class="notice">These rows are out of order. Back must be at least as strong as Middle, and Middle at least as strong as Front.</div>` : ""}
-    <div><div class="row-head"><span class="label">Your hand · ${tray.length} left</span></div>
+    <div class="drop-zone tray-zone" data-drop="tray"><div class="row-head"><span class="label">Your hand · ${tray.length} left</span></div>
       <div class="cards">${tray.map((c) => cardHtml(c, { act: "pick", selected: UI.local.selected.includes(c) })).join("") || `<span class="sub">All cards placed.</span>`}</div></div>
     <div class="actions">
       <button class="btn primary" data-act="lock" ${complete && !foul ? "" : "disabled"}>Lock in</button>
@@ -1022,9 +1112,16 @@ function saveName() {
 
 function placeSelected(row) {
   const room = ROW_SIZE[row] - UI.local.rows[row].length;
-  const moving = UI.local.selected.slice(0, room);
-  UI.local.rows[row] = sortCards([...UI.local.rows[row], ...moving]);
-  UI.local.selected = UI.local.selected.slice(moving.length);
+  moveCards(UI.local.selected.slice(0, room), row);
+}
+
+// Applies a move to the local board; shows the reason when it isn't possible.
+function moveCards(cards, target, swapWith = null) {
+  const result = applyMove(UI.local.rows, cards, target, swapWith);
+  if (result.error) { UI.toast(result.error); return false; }
+  UI.local.rows = result.rows;
+  UI.local.selected = UI.local.selected.filter((c) => !cards.includes(c));
+  return true;
 }
 
 async function copyInvite() {
@@ -1085,14 +1182,141 @@ const ACTIONS = {
     UI.render();
   },
   place: (btn) => { placeSelected(btn.dataset.row); UI.render(); },
-  unplace: (btn) => {
-    const c = btn.dataset.card;
-    for (const row of ROWS) UI.local.rows[row] = UI.local.rows[row].filter((x) => x !== c);
-    UI.render();
+  unplace: (btn) => { moveCards([btn.dataset.card], "tray"); UI.render(); },
+};
+
+// ---------- Drag and drop (mouse, pen and touch via Pointer Events) ----------
+// Mouse/pen: drag starts after a small movement. Touch: press and hold briefly, so a quick
+// swipe still scrolls the page. A tap with no drag falls through to the normal click actions.
+const DRAG_MOUSE_PX = 5;
+const DRAG_TOUCH_HOLD_MS = 180;
+const DRAG_TOUCH_SLOP_PX = 8;
+const DRAG_EDGE_PX = 70;       // auto-scroll when dragging this close to the top or bottom
+const DRAG_SCROLL_SPEED = 14;  // pixels per frame at the very edge
+
+const Drag = {
+  state: null,
+  suppressClick: false,
+
+  begin(ev) {
+    const el = ev.target.closest(".card[data-card]");
+    if (!el || el.disabled || ev.button > 0 || !["pick", "unplace"].includes(el.dataset.act)) return;
+    const card = el.dataset.card;
+    const cards = el.dataset.act === "pick" && UI.local.selected.includes(card) ? [...UI.local.selected] : [card];
+    const rect = el.getBoundingClientRect();
+    this.state = {
+      pointerId: ev.pointerId, touch: ev.pointerType === "touch", active: false,
+      x0: ev.clientX, y0: ev.clientY, x: ev.clientX, y: ev.clientY,
+      dx: ev.clientX - rect.left, dy: ev.clientY - rect.top,
+      cards, ghost: null, holdTimer: null, over: null,
+    };
+    if (this.state.touch) this.state.holdTimer = setTimeout(() => this.start(), DRAG_TOUCH_HOLD_MS);
+  },
+
+  start() {
+    const st = this.state;
+    if (!st || st.active) return;
+    st.active = true;
+    navigator.vibrate?.(10);
+    const ghost = document.createElement("div");
+    ghost.className = "drag-ghost";
+    ghost.setAttribute("aria-hidden", "true");
+    ghost.innerHTML = st.cards.map((c) => cardHtml(c, { act: "none", disabled: true })).join("");
+    document.body.appendChild(ghost);
+    st.ghost = ghost;
+    document.querySelectorAll(".card[data-card]").forEach((el) => { if (st.cards.includes(el.dataset.card)) el.classList.add("dragging"); });
+    this.follow();
+    this.autoScroll();
+  },
+
+  // Scrolls the page while the card is held near the top or bottom edge, so every row is reachable.
+  autoScroll() {
+    const st = this.state;
+    if (!st?.active) return;
+    const h = window.innerHeight;
+    const push = st.y < DRAG_EDGE_PX ? -(DRAG_EDGE_PX - st.y) : st.y > h - DRAG_EDGE_PX ? st.y - (h - DRAG_EDGE_PX) : 0;
+    if (push) {
+      window.scrollBy(0, Math.round((push / DRAG_EDGE_PX) * DRAG_SCROLL_SPEED));
+      this.follow();
+    }
+    requestAnimationFrame(() => this.autoScroll());
+  },
+
+  move(ev) {
+    const st = this.state;
+    if (!st || ev.pointerId !== st.pointerId) return;
+    st.x = ev.clientX; st.y = ev.clientY;
+    const dist = Math.hypot(st.x - st.x0, st.y - st.y0);
+    if (!st.active) {
+      if (st.touch && dist > DRAG_TOUCH_SLOP_PX) this.cancel(); // finger moved first: it's a scroll
+      else if (!st.touch && dist > DRAG_MOUSE_PX) this.start();
+      return;
+    }
+    this.follow();
+  },
+
+  follow() {
+    const st = this.state;
+    st.ghost.style.transform = `translate(${st.x - st.dx}px, ${st.y - st.dy}px)`;
+    const { zone, swapWith } = this.targetAt(st.x, st.y);
+    if (st.over && st.over !== zone) st.over.classList.remove("drop-over", "drop-bad");
+    st.over = zone;
+    if (zone) {
+      const ok = !applyMove(UI.local.rows, st.cards, zone.dataset.drop, swapWith).error;
+      zone.classList.toggle("drop-over", ok);
+      zone.classList.toggle("drop-bad", !ok);
+    }
+  },
+
+  targetAt(x, y) {
+    const hit = document.elementFromPoint(x, y);
+    const zone = hit?.closest("[data-drop]") ?? null;
+    const swapWith = zone && zone.dataset.drop !== "tray" ? hit.closest(".card[data-card]")?.dataset.card ?? null : null;
+    return { zone, swapWith };
+  },
+
+  end(ev) {
+    const st = this.state;
+    if (!st || ev.pointerId !== st.pointerId) return;
+    if (st.active) {
+      const { zone, swapWith } = this.targetAt(ev.clientX, ev.clientY);
+      this.suppressClick = true; // the click that follows a drag is not a tap
+      setTimeout(() => { this.suppressClick = false; }, 0);
+      this.cleanup();
+      if (zone) moveCards(st.cards, zone.dataset.drop, swapWith);
+      UI.render();
+    } else {
+      this.cleanup();
+    }
+  },
+
+  cancel() {
+    const wasActive = this.state?.active;
+    this.cleanup();
+    if (wasActive) UI.render();
+  },
+
+  cleanup() {
+    const st = this.state;
+    if (!st) return;
+    clearTimeout(st.holdTimer);
+    st.ghost?.remove();
+    st.over?.classList.remove("drop-over", "drop-bad");
+    this.state = null;
   },
 };
 
+document.addEventListener("pointerdown", (ev) => Drag.begin(ev));
+document.addEventListener("pointermove", (ev) => Drag.move(ev));
+document.addEventListener("pointerup", (ev) => Drag.end(ev));
+document.addEventListener("pointercancel", () => Drag.cancel());
+// While a touch drag is active, stop the page from scrolling under the finger.
+document.addEventListener("touchmove", (ev) => { if (Drag.state?.active) ev.preventDefault(); }, { passive: false });
+// Long-press on a card shouldn't open the phone's context menu.
+document.addEventListener("contextmenu", (ev) => { if (ev.target.closest(".card[data-card]")) ev.preventDefault(); });
+
 document.addEventListener("click", (ev) => {
+  if (Drag.suppressClick) { Drag.suppressClick = false; return; }
   const btn = ev.target.closest("[data-act]");
   if (!btn || btn.disabled) return;
   ACTIONS[btn.dataset.act]?.(btn);
