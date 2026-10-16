@@ -1,0 +1,1130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pusoy Table</title>
+<meta name="description" content="Play Pusoy (Chinese poker) with friends. Host a table, share the link, no accounts needed.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+/* Layout: one column. Header, room bar, scoreboard, then a felt "table" where the round is played, then the rules. */
+:root {
+  color-scheme: light;
+  --bg: #e8ece9;
+  --surface: #f8faf8;
+  --ink: #18211f;
+  --muted: #586863;
+  --line: #c9d3cf;
+  --felt: #1d4a42;
+  --felt-deep: #163a34;
+  --on-felt: #e6efec;
+  --on-felt-muted: #a9c2bb;
+  --accent: #d99a1e;
+  --accent-ink: #231703;
+  --bad: #b8352a;
+  --card: #fcfcf9;
+  --card-line: #cfd6d3;
+  --suit-red: #c0312a;
+  --suit-black: #1a2321;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --cw: 46px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #0e1513; --surface: #151f1c; --ink: #e4ebe8; --muted: #93a49f; --line: #2a3834;
+    --felt: #173d36; --felt-deep: #11302a; --on-felt: #e6efec; --on-felt-muted: #93b3aa;
+    --accent: #eeb43c; --accent-ink: #1f1503; --bad: #e0675c;
+  }
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-top: calc(20px + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+}
+.wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; }
+p { margin: 0; }
+button, input { font: inherit; color: inherit; }
+button:focus-visible, summary:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* Header */
+.top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.brand h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
+.brand p { color: var(--muted); font-size: 14px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+/* Room bar */
+.roombar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.roombar .code { font-family: var(--font-display); font-weight: 800; font-size: 20px; letter-spacing: 0.12em; }
+.roombar .label { font-size: 12px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 700; }
+.banner { padding: 10px 14px; border-radius: 12px; font-weight: 700; background: var(--accent); color: var(--accent-ink); }
+
+/* Scoreboard */
+.scores { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.score { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.score .who { min-width: 0; flex: 1; }
+.score .name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.score .state { font-size: 12px; color: var(--muted); }
+.score .pts { font-family: var(--font-display); font-weight: 800; font-size: 22px; font-variant-numeric: tabular-nums; }
+.score.empty { color: var(--muted); border-style: dashed; justify-content: center; min-height: 54px; }
+.score .offline { color: var(--bad); }
+.dot-status { width: 10px; height: 10px; border-radius: 50%; flex: none; background: #3fae6f; }
+.dot-status.off { background: var(--bad); }
+
+/* Felt table */
+.table { background: radial-gradient(120% 90% at 50% 0%, var(--felt) 0%, var(--felt-deep) 100%); color: var(--on-felt); border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 16px; }
+.table h2 { font-size: 20px; font-weight: 700; }
+.table .sub { color: var(--on-felt-muted); font-size: 14px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.btn { border: 1px solid transparent; border-radius: 10px; padding: 10px 16px; font-weight: 700; cursor: pointer; min-height: 44px; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); }
+.btn.ghost { background: transparent; color: var(--on-felt); border-color: rgba(230, 239, 236, 0.35); }
+.btn.plain { background: var(--surface); color: var(--ink); border-color: var(--line); }
+.btn.quiet { background: transparent; color: var(--muted); border: none; padding: 6px 8px; min-height: 0; text-decoration: underline; text-underline-offset: 3px; }
+.table .btn.quiet { color: var(--on-felt-muted); }
+.btn.danger { background: var(--bad); color: #fff; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Home screen forms */
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--on-felt-muted); }
+.field input { background: rgba(0, 0, 0, 0.25); border: 1.5px solid rgba(230, 239, 236, 0.3); border-radius: 10px; padding: 10px 12px; min-height: 44px; color: var(--on-felt); width: 100%; }
+.field input::placeholder { color: var(--on-felt-muted); }
+.field input.code-input { text-transform: uppercase; letter-spacing: 0.2em; font-family: var(--font-display); font-weight: 800; font-size: 18px; }
+.choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.choice { background: rgba(0, 0, 0, 0.2); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.choice h3 { font-size: 17px; }
+.join-row { display: flex; gap: 8px; }
+.join-row .field { flex: 1; min-width: 0; }
+
+/* Cards */
+.card {
+  width: var(--cw); aspect-ratio: 5 / 7; max-width: 100%; position: relative; flex: none;
+  background: var(--card); border: 1px solid var(--card-line); border-radius: 7px;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.18); padding: 0; cursor: pointer;
+  font-family: var(--font-display); font-weight: 800; transition: transform 0.12s ease;
+}
+.card .r { position: absolute; top: 3px; left: 5px; font-size: 15px; line-height: 1; }
+.card .s { position: absolute; bottom: 4px; right: 5px; font-size: 20px; line-height: 1; }
+.card.red { color: var(--suit-red); }
+.card.black { color: var(--suit-black); }
+.card.sel { transform: translateY(-7px); outline: 3px solid var(--accent); outline-offset: 1px; }
+.card:disabled { cursor: default; }
+.card.mini { --cw: 34px; border-radius: 5px; cursor: default; }
+.card.mini .r { font-size: 12px; top: 2px; left: 3px; }
+.card.mini .s { font-size: 14px; bottom: 2px; right: 3px; }
+.slot { width: var(--cw); aspect-ratio: 5 / 7; border: 1.5px dashed rgba(230, 239, 236, 0.35); border-radius: 7px; flex: none; }
+
+.rows { display: flex; flex-direction: column; gap: 10px; }
+.row { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.18); border: 2px solid transparent; }
+.row.target { border-color: var(--accent); }
+.row-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.row-head .label { font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--on-felt-muted); }
+.row-head .hand { font-weight: 700; }
+.cards { display: flex; flex-wrap: wrap; gap: 6px; min-height: calc(var(--cw) * 1.4); align-items: flex-end; }
+.notice { padding: 10px 12px; border-radius: 10px; font-size: 14px; background: rgba(184, 53, 42, 0.25); color: var(--on-felt); border: 1px solid rgba(224, 103, 92, 0.6); }
+
+/* Lobby seats */
+.seats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.seat { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 12px; background: rgba(0, 0, 0, 0.2); min-width: 0; min-height: 54px; }
+.seat .nm { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.seat .tag { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--on-felt-muted); }
+.seat.open { border: 1.5px dashed rgba(230, 239, 236, 0.3); background: transparent; color: var(--on-felt-muted); justify-content: center; }
+
+/* Showdown */
+.board { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+.player { background: rgba(0, 0, 0, 0.2); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.player-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.player-head .nm { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.delta { font-family: var(--font-display); font-weight: 800; font-size: 20px; font-variant-numeric: tabular-nums; }
+.delta.up { color: #7fdca6; } .delta.down { color: #ff9a90; } .delta.even { color: var(--on-felt-muted); }
+.mini-row { display: flex; flex-direction: column; gap: 3px; }
+.mini-row .cap { font-size: 12px; color: var(--on-felt-muted); }
+.mini-row .cards { min-height: 0; gap: 4px; }
+.matchups { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.matchup { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 8px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.15); }
+.matchup .vs { font-weight: 700; min-width: 0; }
+.chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: rgba(230, 239, 236, 0.12); }
+.chip.win { background: rgba(127, 220, 166, 0.2); }
+
+/* Rules */
+details.rules { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; }
+details.rules summary { cursor: pointer; font-family: var(--font-display); font-weight: 700; font-size: 17px; }
+details.rules ol, details.rules ul { margin: 8px 0 0; padding-left: 20px; max-width: 65ch; }
+details.rules li { margin-bottom: 4px; }
+
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 700; max-width: calc(100% - 32px); z-index: 20; }
+.confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); color: var(--ink); }
+.confirm .btn.quiet { color: var(--ink); }
+
+@media (max-width: 420px) {
+  :root { --cw: 42px; }
+  .brand h1 { font-size: 26px; }
+  .table { padding: 14px; border-radius: 14px; }
+}
+@media (prefers-reduced-motion: reduce) { .card { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>Pusoy Table</h1>
+      <p>Chinese poker for 2 to 4 players. Split 13 cards into 3, 5 and 5.</p>
+    </div>
+    <span class="pill"><span class="dot"></span><span id="phase-text">Welcome</span></span>
+  </header>
+
+  <div class="roombar" id="roombar" hidden></div>
+  <div class="banner" id="banner" role="status" hidden></div>
+  <section aria-label="Scoreboard" id="score-section" hidden>
+    <div class="scores" id="scores"></div>
+  </section>
+
+  <main class="table" id="table" aria-live="polite"></main>
+
+  <details class="rules">
+    <summary>How to play</summary>
+    <ol>
+      <li>One person taps <b>Host a table</b> and shares the invite link. Everyone else opens the link, types their name and joins.</li>
+      <li>When 2 to 4 players are seated, anyone at the table can deal.</li>
+      <li>Everyone gets 13 cards. Split them into a <b>Front</b> of 3 cards, a <b>Middle</b> of 5 and a <b>Back</b> of 5.</li>
+      <li>The Back must be at least as strong as the Middle, and the Middle at least as strong as the Front. The table won't let you lock in a hand that breaks this.</li>
+      <li>Tap cards to select them, then press <b>Place</b> on a row. Tap a placed card to send it back. <b>Auto-arrange</b> suggests a strong split.</li>
+      <li>When everyone locks in, all hands are revealed and scored.</li>
+    </ol>
+    <ul>
+      <li><b>Scoring:</b> you play each opponent row by row. Win a row: +1. Lose a row: −1. Ties score 0.</li>
+      <li><b>Sweep:</b> win all three rows against someone and you get 3 bonus points (6 total).</li>
+      <li><b>Front hands:</b> only three of a kind, pairs and high cards count. Straights and flushes don't apply to 3 cards.</li>
+      <li><b>Hand order:</b> straight flush, four of a kind, full house, flush, straight, three of a kind, two pair, pair, high card. A-2-3-4-5 is the lowest straight.</li>
+      <li><b>The host's device runs the table.</b> If the host closes the page, the game pauses until they come back.</li>
+    </ul>
+  </details>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
+<script>
+"use strict";
+
+// ==== PURE START: card logic (no DOM, no network) ====
+const RANKS = "23456789TJQKA";
+const SUITS = "shdc";
+const SUIT_SYMBOL = { s: "♠", h: "♥", d: "♦", c: "♣" };
+const SUIT_NAME = { s: "spades", h: "hearts", d: "diamonds", c: "clubs" };
+const ROWS = ["front", "mid", "back"];
+const ROW_SIZE = { front: 3, mid: 5, back: 5 };
+const ROW_LABEL = { front: "Front", mid: "Middle", back: "Back" };
+const HAND_NAMES = ["High card", "Pair", "Two pair", "Three of a kind", "Straight", "Flush", "Full house", "Four of a kind", "Straight flush"];
+const SWEEP_BONUS = 3;
+
+const rankValue = (card) => RANKS.indexOf(card[0]) + 2;
+const rankLabel = (card) => (card[0] === "T" ? "10" : card[0]);
+const isRed = (card) => card[1] === "h" || card[1] === "d";
+
+function newDeck() {
+  const deck = [];
+  for (const r of RANKS) for (const s of SUITS) deck.push(r + s);
+  return deck;
+}
+
+function sortCards(cards) {
+  return [...cards].sort((a, b) => rankValue(b) - rankValue(a) || SUITS.indexOf(a[1]) - SUITS.indexOf(b[1]));
+}
+
+function shuffle(cards) {
+  const out = cards.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const limit = Math.floor(0x100000000 / (i + 1)) * (i + 1);
+    let r;
+    do { r = crypto.getRandomValues(new Uint32Array(1))[0]; } while (r >= limit);
+    const j = r % (i + 1);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+// Groups ranks by count: [[rank, count], ...], biggest groups first, then higher rank.
+function rankGroups(values) {
+  const counts = new Map();
+  for (const v of values) counts.set(v, (counts.get(v) || 0) + 1);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0]);
+}
+
+// A hand's strength is an array [category, ...tiebreakers]; compare lexicographically.
+function evaluate5(cards) {
+  const values = cards.map(rankValue).sort((a, b) => b - a);
+  const flush = cards.every((c) => c[1] === cards[0][1]);
+  const unique = new Set(values).size === 5;
+  let straightHigh = 0;
+  if (unique && values[0] - values[4] === 4) straightHigh = values[0];
+  else if (unique && values.join() === "14,5,4,3,2") straightHigh = 5;
+
+  const groups = rankGroups(values);
+  const order = groups.map((g) => g[0]);
+  const shape = groups.map((g) => g[1]).join("");
+
+  if (straightHigh && flush) return [8, straightHigh];
+  if (shape === "41") return [7, ...order];
+  if (shape === "32") return [6, ...order];
+  if (flush) return [5, ...values];
+  if (straightHigh) return [4, straightHigh];
+  if (shape === "311") return [3, ...order];
+  if (shape === "221") return [2, ...order];
+  if (shape === "2111") return [1, ...order];
+  return [0, ...values];
+}
+
+function evaluate3(cards) {
+  const values = cards.map(rankValue).sort((a, b) => b - a);
+  const groups = rankGroups(values);
+  const order = groups.map((g) => g[0]);
+  if (groups[0][1] === 3) return [3, ...order];
+  if (groups[0][1] === 2) return [1, ...order];
+  return [0, ...values];
+}
+
+const evaluateRow = (cards) => (cards.length === 3 ? evaluate3(cards) : evaluate5(cards));
+
+function compareStrength(a, b) {
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    const x = a[i] ?? -1, y = b[i] ?? -1;
+    if (x !== y) return x > y ? 1 : -1;
+  }
+  return 0;
+}
+
+function handName(strength) {
+  if (strength[0] === 8 && strength[1] === 14) return "Royal flush";
+  return HAND_NAMES[strength[0]];
+}
+
+function isComplete(arr) {
+  return Boolean(arr) && ROWS.every((row) => Array.isArray(arr[row]) && arr[row].length === ROW_SIZE[row]);
+}
+
+function isFoul(arr) {
+  const f = evaluateRow(arr.front), m = evaluateRow(arr.mid), b = evaluateRow(arr.back);
+  return compareStrength(b, m) < 0 || compareStrength(m, f) < 0;
+}
+
+function combinations(items, k) {
+  const out = [];
+  const pick = (start, chosen) => {
+    if (chosen.length === k) { out.push(chosen.slice()); return; }
+    for (let i = start; i <= items.length - (k - chosen.length); i++) {
+      chosen.push(items[i]); pick(i + 1, chosen); chosen.pop();
+    }
+  };
+  pick(0, []);
+  return out;
+}
+
+// Rough value of one row, used only to rank auto-arrange candidates.
+const rowWeight = (strength) => strength[0] + (strength[1] || 0) / 15;
+
+// Tries every legal split of 13 cards and keeps the one with the best weighted total.
+function autoArrange(hand) {
+  const cards = sortCards(hand);
+  const fiveCache = new Map();
+  const eval5 = (combo) => {
+    const key = combo.join("");
+    if (!fiveCache.has(key)) fiveCache.set(key, evaluate5(combo));
+    return fiveCache.get(key);
+  };
+  let best = null;
+  for (const back of combinations(cards, 5)) {
+    const backStrength = eval5(back);
+    const restAfterBack = cards.filter((c) => !back.includes(c));
+    for (const mid of combinations(restAfterBack, 5)) {
+      const midStrength = eval5(mid);
+      if (compareStrength(backStrength, midStrength) < 0) continue;
+      const front = restAfterBack.filter((c) => !mid.includes(c));
+      const frontStrength = evaluate3(front);
+      if (compareStrength(midStrength, frontStrength) < 0) continue;
+      const score = rowWeight(backStrength) + rowWeight(midStrength) * 1.2 + rowWeight(frontStrength) * 1.5;
+      if (!best || score > best.score) best = { score, front, mid, back };
+    }
+  }
+  return { front: best.front, mid: best.mid, back: best.back };
+}
+
+// arrangements: { playerId: arrangement | null }. null means the hand fouled.
+function scoreRound(playerIds, arrangements) {
+  const points = Object.fromEntries(playerIds.map((p) => [p, 0]));
+  const matchups = [];
+  for (let i = 0; i < playerIds.length; i++) {
+    for (let j = i + 1; j < playerIds.length; j++) {
+      const a = playerIds[i], b = playerIds[j];
+      const arrA = arrangements[a], arrB = arrangements[b];
+      const rows = {};
+      for (const row of ROWS) {
+        if (!arrA && !arrB) rows[row] = 0;
+        else if (!arrA) rows[row] = -1;
+        else if (!arrB) rows[row] = 1;
+        else rows[row] = compareStrength(evaluateRow(arrA[row]), evaluateRow(arrB[row]));
+      }
+      const winsA = ROWS.filter((r) => rows[r] > 0).length;
+      const winsB = ROWS.filter((r) => rows[r] < 0).length;
+      let net = winsA - winsB;
+      if (winsA === 3) net += SWEEP_BONUS;
+      if (winsB === 3) net -= SWEEP_BONUS;
+      points[a] += net;
+      points[b] -= net;
+      matchups.push({ a, b, rows, net, sweep: winsA === 3 ? a : winsB === 3 ? b : null });
+    }
+  }
+  return { points, matchups };
+}
+
+// ==== Table: the game's rules engine. Runs only on the host's device. ====
+const MAX_SEATS = 4;
+const MAX_NAME = 16;
+
+class GameError extends Error {}
+
+function cleanName(name, fallback) {
+  const s = String(name ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, MAX_NAME);
+  return s || fallback;
+}
+
+class Table {
+  constructor(saved) {
+    this.players = saved?.players?.map((p) => ({ ...p, connected: false })) ?? [];
+    this.round = saved?.round ?? null;
+    this.roundCount = saved?.roundCount ?? 0;
+    this.nextId = saved?.nextId ?? 1;
+    this.hostId = saved?.hostId ?? null;
+    this.notice = saved?.notice ?? { seq: 0, text: "" };
+  }
+
+  toJSON() {
+    const { players, round, roundCount, nextId, hostId, notice } = this;
+    return { players, round, roundCount, nextId, hostId, notice };
+  }
+
+  player(id) { return this.players.find((p) => p.id === id); }
+  get phase() { return !this.round ? "lobby" : this.round.result ? "showdown" : "arranging"; }
+  announce(text) { this.notice = { seq: this.notice.seq + 1, text }; }
+
+  // Seats a player, or reseats them when the same device (token) comes back.
+  join(token, name) {
+    const existing = this.players.find((p) => p.token === token);
+    if (existing) {
+      existing.connected = true;
+      existing.name = cleanName(name, existing.name);
+      return existing.id;
+    }
+    if (this.players.length >= MAX_SEATS) throw new GameError("This table is full. Four players is the limit.");
+    const id = "p" + this.nextId++;
+    this.players.push({ id, token, name: cleanName(name, "Player " + id.slice(1)), connected: true, score: 0 });
+    if (!this.hostId) this.hostId = id;
+    return id;
+  }
+
+  setConnected(id, connected) {
+    const p = this.player(id);
+    if (p) p.connected = connected;
+  }
+
+  // Applies one action from a player. Throws GameError with a readable message when it's not allowed.
+  handle(id, msg) {
+    if (!this.player(id)) throw new GameError("You're not seated at this table.");
+    switch (msg?.t) {
+      case "deal": return this.deal(id, Boolean(msg.redeal));
+      case "lock": return this.lock(id, msg.arr);
+      case "unlock": return this.unlock(id);
+      case "leave": return this.remove(id, id);
+      case "remove": return this.remove(id, msg.target);
+      case "reset": return this.resetScores(id);
+      default: throw new GameError("Unknown action.");
+    }
+  }
+
+  deal(id, redeal) {
+    if (this.players.length < 2) throw new GameError("You need at least 2 players to deal.");
+    if (this.phase === "arranging" && !redeal) throw new GameError("A round is already in progress.");
+    const deck = shuffle(newDeck());
+    const ids = this.players.map((p) => p.id);
+    const hands = {};
+    ids.forEach((pid, i) => { hands[pid] = sortCards(deck.slice(i * 13, i * 13 + 13)); });
+    this.roundCount += 1;
+    this.round = {
+      n: this.roundCount,
+      players: ids,
+      names: Object.fromEntries(this.players.map((p) => [p.id, p.name])),
+      hands,
+      locked: {},
+      result: null,
+    };
+    if (redeal) this.announce(`${this.player(id).name} redealt the round.`);
+  }
+
+  lock(id, arr) {
+    const r = this.round;
+    if (this.phase !== "arranging" || !r.players.includes(id)) throw new GameError("You're not in this round.");
+    if (r.locked[id]) throw new GameError("You've already locked in.");
+    if (!isComplete(arr)) throw new GameError("Fill all three rows first.");
+    const clean = { front: arr.front.map(String), mid: arr.mid.map(String), back: arr.back.map(String) };
+    const placed = ROWS.flatMap((row) => clean[row]).sort().join();
+    if (placed !== [...r.hands[id]].sort().join()) throw new GameError("Those aren't the cards you were dealt.");
+    if (isFoul(clean)) throw new GameError("Your rows are out of order. Back ≥ Middle ≥ Front.");
+    r.locked[id] = { front: sortCards(clean.front), mid: sortCards(clean.mid), back: sortCards(clean.back) };
+    if (r.players.every((pid) => r.locked[pid])) this.finishRound();
+  }
+
+  unlock(id) {
+    if (this.phase !== "arranging" || !this.round.locked[id]) return;
+    delete this.round.locked[id];
+  }
+
+  finishRound() {
+    const r = this.round;
+    r.result = scoreRound(r.players, r.locked);
+    for (const [pid, pts] of Object.entries(r.result.points)) {
+      const p = this.player(pid);
+      if (p) p.score += pts;
+    }
+  }
+
+  // Removes a player. A player can remove themselves; the host can remove anyone else.
+  remove(byId, targetId) {
+    if (byId !== targetId && byId !== this.hostId) throw new GameError("Only the host can remove players.");
+    if (targetId === this.hostId) throw new GameError("The host can't leave. End the table instead.");
+    const target = this.player(targetId);
+    if (!target) return;
+    this.players = this.players.filter((p) => p.id !== targetId);
+    if (this.phase === "arranging" && this.round.players.includes(targetId)) {
+      this.round = null;
+      this.announce(`${target.name} left, so the round was cancelled. Deal again to keep playing.`);
+    } else {
+      this.announce(`${target.name} left the table.`);
+    }
+  }
+
+  resetScores(id) {
+    if (id !== this.hostId) throw new GameError("Only the host can reset scores.");
+    for (const p of this.players) p.score = 0;
+    this.announce("The host reset everyone's score to 0.");
+  }
+
+  // What one player is allowed to see: their own hand, and everyone's hands only after the reveal.
+  viewFor(id) {
+    const r = this.round;
+    return {
+      you: id,
+      hostId: this.hostId,
+      phase: this.phase,
+      nextRound: this.roundCount + 1,
+      notice: this.notice,
+      players: this.players.map(({ id: pid, name, connected, score }) => ({ id: pid, name, connected, score })),
+      round: r && {
+        n: r.n,
+        players: r.players,
+        names: r.names,
+        locked: r.players.filter((pid) => r.locked[pid]),
+        hand: r.hands[id] ?? null,
+        mine: r.locked[id] ?? null,
+        reveals: r.result ? r.locked : null,
+        result: r.result,
+      },
+    };
+  }
+}
+// ==== PURE END ====
+
+// ---------- Device storage (best effort) ----------
+const Store = {
+  get(key, fallback = null) {
+    try { const v = localStorage.getItem(key); return v === null ? fallback : JSON.parse(v); } catch { return fallback; }
+  },
+  set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable */ } },
+  remove(key) { try { localStorage.removeItem(key); } catch { /* storage unavailable */ } },
+};
+const KEYS = { token: "pusoy.token", name: "pusoy.name", host: "pusoy.host", session: "pusoy.session" };
+const HOST_SAVE_HOURS = 24;
+
+function deviceToken() {
+  let t = Store.get(KEYS.token);
+  if (!t) { t = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join(""); Store.set(KEYS.token, t); }
+  return t;
+}
+
+// ---------- Networking (PeerJS) ----------
+const PEER_PREFIX = "pusoy-table-v1-";
+const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const CODE_LENGTH = 5;
+const RETRY_MS = 3000;
+const MAX_RETRIES = 20;
+
+const newCode = () => Array.from(crypto.getRandomValues(new Uint8Array(CODE_LENGTH)), (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
+const normalizeCode = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, CODE_LENGTH);
+const inviteLink = (code) => `${location.origin}${location.pathname}#${code}`;
+
+const Net = {
+  peer: null,
+  role: null,      // "host" | "guest"
+  code: null,
+  table: null,     // host only
+  conns: new Map(),// host only: playerId -> DataConnection
+  hostConn: null,  // guest only
+  joined: false,
+  retries: 0,
+  retryTimer: null,
+
+  destroy() {
+    clearTimeout(this.retryTimer);
+    try { this.peer?.destroy(); } catch { /* already closed */ }
+    Object.assign(this, { peer: null, role: null, code: null, table: null, hostConn: null, joined: false, retries: 0 });
+    this.conns = new Map();
+  },
+
+  // ----- Host -----
+  host(code, saved, attempt = 0) {
+    this.destroy();
+    this.role = "host";
+    this.code = code;
+    this.table = new Table(saved);
+    const myId = this.table.join(deviceToken(), UI.name());
+    this.table.hostId = myId;
+    UI.setStatus("connecting", `Opening table ${code}…`);
+
+    const peer = new Peer(PEER_PREFIX + code);
+    this.peer = peer;
+    peer.on("open", () => {
+      Store.set(KEYS.session, { role: "host", code });
+      history.replaceState(null, "", "#" + code);
+      UI.setStatus("ok");
+      this.broadcast();
+    });
+    peer.on("connection", (conn) => this.acceptGuest(conn));
+    peer.on("disconnected", () => { if (!peer.destroyed) { UI.setStatus("reconnecting", "Lost the connection to the matchmaking server. Reconnecting…"); peer.reconnect(); } });
+    peer.on("error", (err) => {
+      if (err.type === "unavailable-id") {
+        // The code is still held from a moment ago (usually after a refresh). Try again shortly.
+        if (saved && attempt < MAX_RETRIES) {
+          UI.setStatus("reconnecting", `Reopening table ${code}… this can take up to a minute after a refresh.`);
+          const snapshot = this.table.toJSON();
+          this.retryTimer = setTimeout(() => this.host(code, snapshot, attempt + 1), RETRY_MS);
+          return;
+        }
+        if (!saved) return this.host(newCode(), null); // brand-new table: just pick another code
+      }
+      UI.fail(friendlyPeerError(err));
+    });
+  },
+
+  acceptGuest(conn) {
+    conn.on("data", (msg) => {
+      try {
+        if (msg?.t === "hello") {
+          const id = this.table.join(String(msg.token || ""), msg.name);
+          const old = this.conns.get(id);
+          if (old && old !== conn) old.close();
+          this.conns.set(id, conn);
+          conn.playerId = id;
+          this.broadcast();
+          return;
+        }
+        if (!conn.playerId) return;
+        this.table.handle(conn.playerId, msg);
+        this.broadcast();
+      } catch (e) {
+        const text = e instanceof GameError ? e.message : "That didn't work. Try again.";
+        conn.send({ t: "error", text, fatal: msg?.t === "hello" });
+      }
+    });
+    conn.on("close", () => {
+      const id = conn.playerId;
+      if (id && this.conns.get(id) === conn) {
+        this.conns.delete(id);
+        this.table.setConnected(id, false);
+        this.broadcast();
+      }
+    });
+  },
+
+  broadcast() {
+    for (const [id, conn] of this.conns) {
+      if (!this.table.player(id)) { conn.send({ t: "removed" }); setTimeout(() => conn.close(), 300); this.conns.delete(id); continue; }
+      if (conn.open) conn.send({ t: "state", view: this.table.viewFor(id) });
+    }
+    Store.set(KEYS.host, { code: this.code, table: this.table.toJSON(), savedAt: Date.now() });
+    UI.show(this.table.viewFor(this.table.hostId), this.code);
+  },
+
+  // ----- Guest -----
+  join(code) {
+    this.destroy();
+    this.role = "guest";
+    this.code = code;
+    UI.setStatus("connecting", `Joining table ${code}…`);
+    const peer = new Peer();
+    this.peer = peer;
+    peer.on("open", () => this.connectToHost());
+    peer.on("disconnected", () => { if (!peer.destroyed) peer.reconnect(); });
+    peer.on("error", (err) => {
+      if (err.type === "peer-unavailable") {
+        if (!this.joined) return UI.fail(`No table is open with code ${code}. Check the code, or ask the host to open the page.`);
+        return this.scheduleRetry();
+      }
+      if (["network", "server-error", "socket-error", "socket-closed"].includes(err.type)) return this.scheduleRetry();
+      UI.fail(friendlyPeerError(err));
+    });
+  },
+
+  connectToHost() {
+    const conn = this.peer.connect(PEER_PREFIX + this.code, { reliable: true, serialization: "json" });
+    this.hostConn = conn;
+    conn.on("open", () => conn.send({ t: "hello", token: deviceToken(), name: UI.name() }));
+    conn.on("data", (msg) => {
+      if (msg?.t === "state") {
+        this.joined = true;
+        this.retries = 0;
+        Store.set(KEYS.session, { role: "guest", code: this.code });
+        history.replaceState(null, "", "#" + this.code);
+        UI.setStatus("ok");
+        UI.show(msg.view, this.code);
+      } else if (msg?.t === "error") {
+        if (msg.fatal) { UI.fail(msg.text); this.destroy(); }
+        else UI.toast(msg.text);
+      } else if (msg?.t === "removed" || msg?.t === "ended") {
+        Store.remove(KEYS.session);
+        UI.fail(msg.t === "ended" ? "The host ended the table." : "You're no longer seated at this table.");
+        this.destroy();
+      }
+    });
+    conn.on("close", () => { if (this.hostConn === conn && this.role === "guest") this.scheduleRetry(); });
+  },
+
+  scheduleRetry() {
+    if (this.role !== "guest") return;
+    clearTimeout(this.retryTimer);
+    if (!this.joined) { UI.fail(`Couldn't reach table ${this.code}. Check the code, or ask the host to open the page.`); return this.destroy(); }
+    if (this.retries++ >= MAX_RETRIES) return UI.fail("Lost the connection to the host. Ask them to keep the page open, then rejoin.");
+    UI.setStatus("reconnecting", "Lost the connection to the host. Reconnecting…");
+    this.retryTimer = setTimeout(() => { if (this.peer && !this.peer.destroyed) this.connectToHost(); }, RETRY_MS);
+  },
+
+  endTable() {
+    for (const conn of this.conns.values()) if (conn.open) conn.send({ t: "ended" });
+    Store.remove(KEYS.host);
+  },
+
+  // ----- Shared -----
+  send(msg) {
+    if (this.role === "host") {
+      try { this.table.handle(this.table.hostId, msg); this.broadcast(); }
+      catch (e) { UI.toast(e instanceof GameError ? e.message : "That didn't work. Try again."); }
+    } else if (this.hostConn?.open) {
+      this.hostConn.send(msg);
+    } else {
+      UI.toast("Not connected to the host right now. Hang on a moment.");
+    }
+  },
+};
+
+function friendlyPeerError(err) {
+  switch (err?.type) {
+    case "browser-incompatible": return "This browser can't make peer-to-peer connections. Try Chrome, Edge, Firefox or Safari.";
+    case "network": case "server-error": case "socket-error": return "Couldn't reach the matchmaking server. Check your internet connection and try again.";
+    case "unavailable-id": return "That table code is already in use. Try hosting again.";
+    default: return "Something went wrong with the connection. Try again.";
+  }
+}
+
+// ---------- UI ----------
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+
+const UI = {
+  view: null,
+  code: null,
+  screen: "home",          // "home" | "game"
+  failMessage: "",
+  confirm: null,           // "reset" | "redeal" | "end" | "leave"
+  lastNotice: 0,
+  local: { key: "", rows: { front: [], mid: [], back: [] }, selected: [] },
+  toastTimer: null,
+
+  name() { return cleanName($("name-input")?.value ?? Store.get(KEYS.name, ""), "Player"); },
+
+  toast(msg) {
+    const el = $("toast");
+    el.textContent = msg;
+    el.hidden = false;
+    clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => { el.hidden = true; }, 3500);
+  },
+
+  setStatus(kind, text = "") {
+    const banner = $("banner");
+    banner.hidden = kind === "ok" || this.screen === "home";
+    banner.textContent = text;
+    if (kind === "connecting" && this.screen === "home") this.renderConnecting(text);
+  },
+
+  fail(message) {
+    this.screen = "home";
+    this.view = null;
+    this.failMessage = message;
+    $("banner").hidden = true;
+    this.render();
+  },
+
+  show(view, code) {
+    this.screen = "game";
+    this.view = view;
+    this.code = code;
+    this.failMessage = "";
+    if (view.notice?.seq > this.lastNotice) {
+      if (this.lastNotice) this.toast(view.notice.text);
+      this.lastNotice = view.notice.seq;
+    }
+    this.syncLocal();
+    this.render();
+  },
+
+  // Resets the arranging board when a new hand arrives; restores a locked hand after a refresh.
+  syncLocal() {
+    const r = this.view?.round;
+    const key = r?.hand ? `${this.code}:${r.n}:${r.hand.join("")}` : "";
+    if (key === this.local.key) return;
+    this.local = { key, rows: { front: [], mid: [], back: [] }, selected: [] };
+    if (r?.mine) this.local.rows = { front: [...r.mine.front], mid: [...r.mine.mid], back: [...r.mine.back] };
+  },
+
+  render() {
+    const game = this.screen === "game" && this.view;
+    $("roombar").hidden = !game;
+    $("score-section").hidden = !game;
+    $("phase-text").textContent = game ? phaseLabel(this.view) : "Welcome";
+    if (!game) { $("table").innerHTML = homeHtml(this.failMessage); return; }
+    $("roombar").innerHTML = roomBarHtml(this.view, this.code, this.confirm);
+    $("scores").innerHTML = scoresHtml(this.view);
+    $("table").innerHTML = tableHtml(this.view);
+  },
+
+  renderConnecting(text) {
+    $("roombar").hidden = true;
+    $("score-section").hidden = true;
+    $("table").innerHTML = `<div><h2>Connecting</h2><p class="sub">${esc(text)}</p></div>
+      <div class="actions"><button class="btn ghost" data-act="cancel-connect">Cancel</button></div>`;
+  },
+};
+
+// ----- View helpers -----
+const inRound = (v) => Boolean(v.round?.players.includes(v.you));
+const isLocked = (v, id) => Boolean(v.round?.locked.includes(id));
+const isHost = (v) => v.you === v.hostId;
+function nameOf(v, id) {
+  if (id === v.you) return "You";
+  return v.players.find((p) => p.id === id)?.name ?? v.round?.names?.[id] ?? "Player";
+}
+function phaseLabel(v) {
+  if (v.phase === "lobby") return "Waiting to deal";
+  return `Round ${v.round.n} · ${v.phase === "showdown" ? "Showdown" : "Arranging"}`;
+}
+
+function cardHtml(card, { act, selected, mini, disabled } = {}) {
+  const cls = ["card", isRed(card) ? "red" : "black", selected ? "sel" : "", mini ? "mini" : ""].join(" ");
+  const label = `${rankLabel(card)} of ${SUIT_NAME[card[1]]}`;
+  const inner = `<span class="r">${rankLabel(card)}</span><span class="s">${SUIT_SYMBOL[card[1]]}</span>`;
+  if (mini) return `<span class="${cls}" role="img" aria-label="${label}">${inner}</span>`;
+  return `<button class="${cls}" data-act="${act}" data-card="${card}" aria-label="${label}" aria-pressed="${selected ? "true" : "false"}" ${disabled ? "disabled" : ""}>${inner}</button>`;
+}
+
+function homeHtml(failMessage) {
+  const hashCode = normalizeCode(location.hash.slice(1));
+  const savedName = Store.get(KEYS.name, "");
+  const saved = Store.get(KEYS.host);
+  const canResume = saved?.code && Date.now() - saved.savedAt < HOST_SAVE_HOURS * 3600e3;
+  return `<div><h2>${hashCode ? `You're invited to table ${esc(hashCode)}` : "Start or join a table"}</h2>
+      <p class="sub">${hashCode ? "Type your name and tap Join." : "One person hosts and shares the link. Everyone else joins with it."}</p></div>
+    ${failMessage ? `<div class="notice">${esc(failMessage)}</div>` : ""}
+    <div class="field"><label for="name-input">Your name</label>
+      <input id="name-input" maxlength="${MAX_NAME}" autocomplete="nickname" placeholder="e.g. Gabriel" value="${esc(savedName)}"></div>
+    <div class="choices">
+      <div class="choice">
+        <h3>Join a table</h3>
+        <div class="join-row">
+          <div class="field"><label for="code-input">Table code</label>
+            <input id="code-input" class="code-input" maxlength="${CODE_LENGTH}" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="KX7Q2" value="${esc(hashCode)}"></div>
+        </div>
+        <div class="actions"><button class="btn ${hashCode ? "primary" : "ghost"}" data-act="join">Join</button></div>
+      </div>
+      <div class="choice">
+        <h3>Host a table</h3>
+        <p class="sub">Your device runs the game. Keep this page open while you play.</p>
+        <div class="actions">
+          <button class="btn ${hashCode ? "ghost" : "primary"}" data-act="host">Host a table</button>
+          ${canResume ? `<button class="btn ghost" data-act="resume">Reopen table ${esc(saved.code)}</button>` : ""}
+        </div>
+      </div>
+    </div>`;
+}
+
+function roomBarHtml(v, code, confirm) {
+  if (confirm === "end" || confirm === "leave") {
+    const text = confirm === "end" ? "End the table for everyone? Scores will be cleared." : "Leave the table? Your score will be lost.";
+    return `<div class="confirm" role="group" aria-label="Confirm"><span>${text}</span>
+      <button class="btn danger" data-act="${confirm}-yes">${confirm === "end" ? "End table" : "Leave"}</button>
+      <button class="btn quiet" data-act="cancel">Stay</button></div>`;
+  }
+  return `<div><div class="label">Table code</div><div class="code">${esc(code)}</div></div>
+    <div class="actions">
+      <button class="btn plain" data-act="copy">Copy invite link</button>
+      <button class="btn quiet" data-act="${isHost(v) ? "end" : "leave"}">${isHost(v) ? "End table" : "Leave table"}</button>
+    </div>`;
+}
+
+function scoresHtml(v) {
+  const cells = v.players.map((p) => {
+    let state = p.id === v.hostId ? "Host" : "Seated";
+    if (v.round && v.phase === "arranging") state = v.round.players.includes(p.id) ? (isLocked(v, p.id) ? "Locked in" : "Arranging") : "Joins next round";
+    if (v.round && v.phase === "showdown") state = v.round.players.includes(p.id) ? "Revealed" : "Joins next round";
+    const remove = isHost(v) && p.id !== v.you && !p.connected ? ` · <button class="btn quiet" style="padding:0" data-act="remove" data-target="${p.id}">Remove</button>` : "";
+    return `<div class="score"><span class="dot-status ${p.connected ? "" : "off"}" title="${p.connected ? "Online" : "Offline"}"></span>
+      <div class="who"><div class="name">${esc(nameOf(v, p.id))}</div><div class="state">${p.connected ? state : `<span class="offline">Offline</span>`}${remove}</div></div>
+      <div class="pts">${p.score > 0 ? "+" : ""}${p.score}</div></div>`;
+  });
+  for (let i = v.players.length; i < MAX_SEATS; i++) cells.push(`<div class="score empty">Open seat</div>`);
+  return cells.join("");
+}
+
+function tableHtml(v) {
+  if (v.phase === "lobby") return lobbyHtml(v);
+  if (v.phase === "arranging") return inRound(v) ? arrangingHtml(v) : spectatorHtml(v);
+  return showdownHtml(v);
+}
+
+function lobbyHtml(v) {
+  const seats = v.players.map((p) => `<div class="seat"><span class="nm">${esc(nameOf(v, p.id))}</span>${p.id === v.hostId ? `<span class="tag">Host</span>` : ""}</div>`);
+  for (let i = v.players.length; i < MAX_SEATS; i++) seats.push(`<div class="seat open">Open seat</div>`);
+  const enough = v.players.length >= 2;
+  const hint = enough ? "Everyone here? Anyone at the table can deal." : "Waiting for at least one more player. Tap Copy invite link and send it to a friend.";
+  return `<div><h2>Table</h2><p class="sub">${hint}</p></div>
+    <div class="seats">${seats.join("")}</div>
+    <div class="actions"><button class="btn primary" data-act="deal" ${enough ? "" : "disabled"}>Deal round ${v.nextRound}</button></div>
+    ${isHost(v) ? resetHtml() : ""}`;
+}
+
+function rowHtml(row, interactive) {
+  const cards = UI.local.rows[row];
+  const strength = cards.length === ROW_SIZE[row] ? evaluateRow(cards) : null;
+  const slots = Array.from({ length: ROW_SIZE[row] - cards.length }, () => `<span class="slot" aria-hidden="true"></span>`).join("");
+  const head = `<div class="row-head"><span class="label">${ROW_LABEL[row]} · ${ROW_SIZE[row]} cards</span><span class="hand">${strength ? handName(strength) : `${cards.length}/${ROW_SIZE[row]}`}</span></div>`;
+  const body = `<div class="cards">${cards.map((c) => cardHtml(c, { act: "unplace", disabled: !interactive })).join("")}${slots}</div>`;
+  if (!interactive) return `<div class="row">${head}${body}</div>`;
+  const fits = Math.min(UI.local.selected.length, ROW_SIZE[row] - cards.length);
+  return `<div class="row ${fits ? "target" : ""}">${head}${body}
+    <div class="actions"><button class="btn ghost" data-act="place" data-row="${row}" ${fits ? "" : "disabled"}>${fits ? `Place ${fits} card${fits > 1 ? "s" : ""} here` : "Place here"}</button></div></div>`;
+}
+
+function arrangingHtml(v) {
+  const r = v.round;
+  const waiting = r.players.filter((p) => !isLocked(v, p));
+  if (isLocked(v, v.you)) {
+    return `<div><h2>Round ${r.n} · Locked in</h2><p class="sub">Waiting for ${esc(waiting.map((p) => nameOf(v, p)).join(", "))}.</p></div>
+      <div class="rows">${ROWS.map((row) => rowHtml(row, false)).join("")}</div>
+      <div class="actions"><button class="btn ghost" data-act="unlock">Change my hand</button></div>
+      ${redealHtml()}`;
+  }
+  const rows = UI.local.rows;
+  const placed = ROWS.flatMap((row) => rows[row]);
+  const tray = sortCards(r.hand.filter((c) => !placed.includes(c)));
+  const complete = isComplete(rows);
+  const foul = complete && isFoul(rows);
+  const lockedNames = r.locked.map((p) => nameOf(v, p));
+  return `<div><h2>Round ${r.n} · Arrange your hand</h2><p class="sub">Tap cards to select them, then place them in a row. Tap a placed card to send it back.</p></div>
+    <div class="rows">${ROWS.map((row) => rowHtml(row, true)).join("")}</div>
+    ${foul ? `<div class="notice">These rows are out of order. Back must be at least as strong as Middle, and Middle at least as strong as Front.</div>` : ""}
+    <div><div class="row-head"><span class="label">Your hand · ${tray.length} left</span></div>
+      <div class="cards">${tray.map((c) => cardHtml(c, { act: "pick", selected: UI.local.selected.includes(c) })).join("") || `<span class="sub">All cards placed.</span>`}</div></div>
+    <div class="actions">
+      <button class="btn primary" data-act="lock" ${complete && !foul ? "" : "disabled"}>Lock in</button>
+      <button class="btn ghost" data-act="auto">Auto-arrange</button>
+      <button class="btn ghost" data-act="clear" ${placed.length ? "" : "disabled"}>Clear rows</button>
+    </div>
+    ${lockedNames.length ? `<p class="sub">Locked in: ${esc(lockedNames.join(", "))}</p>` : ""}
+    ${redealHtml()}`;
+}
+
+function spectatorHtml(v) {
+  const waiting = v.round.players.filter((p) => !isLocked(v, p)).map((p) => nameOf(v, p));
+  return `<div><h2>Round ${v.round.n} in progress</h2><p class="sub">Waiting for ${esc(waiting.join(", "))}. You'll be dealt in next round.</p></div>`;
+}
+
+function redealHtml() {
+  if (UI.confirm === "redeal") {
+    return `<div class="confirm" role="group" aria-label="Confirm redeal"><span>Throw out this round and deal new cards? Nobody scores for it.</span>
+      <button class="btn danger" data-act="redeal-yes">Redeal</button><button class="btn quiet" data-act="cancel">Keep playing</button></div>`;
+  }
+  return `<div class="actions"><button class="btn quiet" data-act="redeal">Stuck waiting on someone? Redeal this round</button></div>`;
+}
+
+function resetHtml() {
+  if (UI.confirm === "reset") {
+    return `<div class="confirm" role="group" aria-label="Confirm reset"><span>Reset everyone's score to 0?</span>
+      <button class="btn danger" data-act="reset-yes">Reset scores</button><button class="btn quiet" data-act="cancel">Keep scores</button></div>`;
+  }
+  return `<div class="actions"><button class="btn quiet" data-act="reset">Reset scores</button></div>`;
+}
+
+function showdownHtml(v) {
+  const r = v.round;
+  const { points, matchups } = r.result;
+  const panels = r.players.map((p) => {
+    const arr = r.reveals[p];
+    const d = points[p];
+    const rows = ROWS.map((row) => `<div class="mini-row"><span class="cap">${ROW_LABEL[row]} · ${handName(evaluateRow(arr[row]))}</span>
+      <div class="cards">${arr[row].map((c) => cardHtml(c, { mini: true })).join("")}</div></div>`).join("");
+    return `<div class="player"><div class="player-head"><span class="nm">${esc(nameOf(v, p))}</span>
+      <span class="delta ${d > 0 ? "up" : d < 0 ? "down" : "even"}">${d > 0 ? "+" : ""}${d}</span></div>${rows}</div>`;
+  }).join("");
+  const ups = matchups.map((m) => {
+    const chips = ROWS.map((row) => {
+      const w = m.rows[row] > 0 ? m.a : m.rows[row] < 0 ? m.b : null;
+      return `<span class="chip ${w === v.you ? "win" : ""}">${ROW_LABEL[row]}: ${w ? esc(nameOf(v, w)) : "tie"}</span>`;
+    }).join("");
+    const result = m.net === 0 ? "Even" : `${esc(nameOf(v, m.net > 0 ? m.a : m.b))} +${Math.abs(m.net)}${m.sweep ? " (sweep)" : ""}`;
+    return `<div class="matchup"><span class="vs">${esc(nameOf(v, m.a))} vs ${esc(nameOf(v, m.b))}</span>${chips}<span class="chip">${result}</span></div>`;
+  }).join("");
+  return `<div><h2>Round ${r.n} · Showdown</h2><p class="sub">Points are added to the scoreboard.</p></div>
+    <div class="board">${panels}</div>
+    <div class="matchups">${ups}</div>
+    <div class="actions"><button class="btn primary" data-act="deal" ${v.players.length >= 2 ? "" : "disabled"}>Deal round ${v.nextRound}</button></div>
+    ${isHost(v) ? resetHtml() : ""}`;
+}
+
+// ---------- Actions ----------
+function saveName() {
+  const raw = $("name-input")?.value ?? "";
+  if (!raw.trim()) { UI.toast("Type your name first."); $("name-input")?.focus(); return false; }
+  Store.set(KEYS.name, cleanName(raw, "Player"));
+  return true;
+}
+
+function placeSelected(row) {
+  const room = ROW_SIZE[row] - UI.local.rows[row].length;
+  const moving = UI.local.selected.slice(0, room);
+  UI.local.rows[row] = sortCards([...UI.local.rows[row], ...moving]);
+  UI.local.selected = UI.local.selected.slice(moving.length);
+}
+
+async function copyInvite() {
+  const link = inviteLink(UI.code);
+  try {
+    await navigator.clipboard.writeText(link);
+    UI.toast("Invite link copied. Send it to your friends.");
+  } catch {
+    UI.toast(`Copy this link: ${link}`);
+  }
+}
+
+function goHome(message = "") {
+  Net.destroy();
+  Store.remove(KEYS.session);
+  history.replaceState(null, "", location.pathname);
+  UI.confirm = null;
+  UI.fail(message);
+}
+
+const ACTIONS = {
+  host: () => { if (saveName()) Net.host(newCode(), null); },
+  resume: () => {
+    const saved = Store.get(KEYS.host);
+    if (saved && saveName()) Net.host(saved.code, saved.table);
+  },
+  join: () => {
+    const code = normalizeCode($("code-input")?.value);
+    if (code.length !== CODE_LENGTH) { UI.toast(`Table codes are ${CODE_LENGTH} characters.`); $("code-input")?.focus(); return; }
+    if (saveName()) Net.join(code);
+  },
+  "cancel-connect": () => goHome(),
+  copy: copyInvite,
+  deal: () => Net.send({ t: "deal" }),
+  redeal: () => { UI.confirm = "redeal"; UI.render(); },
+  "redeal-yes": () => { UI.confirm = null; Net.send({ t: "deal", redeal: true }); },
+  reset: () => { UI.confirm = "reset"; UI.render(); },
+  "reset-yes": () => { UI.confirm = null; Net.send({ t: "reset" }); },
+  end: () => { UI.confirm = "end"; UI.render(); },
+  "end-yes": () => { Net.endTable(); setTimeout(() => goHome("You ended the table."), 300); },
+  leave: () => { UI.confirm = "leave"; UI.render(); },
+  "leave-yes": () => { Net.send({ t: "leave" }); setTimeout(() => goHome("You left the table."), 400); },
+  cancel: () => { UI.confirm = null; UI.render(); },
+  remove: (btn) => Net.send({ t: "remove", target: btn.dataset.target }),
+  lock: () => Net.send({ t: "lock", arr: UI.local.rows }),
+  unlock: () => Net.send({ t: "unlock" }),
+  auto: () => {
+    const hand = UI.view?.round?.hand;
+    if (!hand) return;
+    UI.local.rows = autoArrange(hand);
+    UI.local.selected = [];
+    UI.render();
+  },
+  clear: () => { UI.local.rows = { front: [], mid: [], back: [] }; UI.local.selected = []; UI.render(); },
+  pick: (btn) => {
+    const c = btn.dataset.card, sel = UI.local.selected;
+    UI.local.selected = sel.includes(c) ? sel.filter((x) => x !== c) : [...sel, c];
+    UI.render();
+  },
+  place: (btn) => { placeSelected(btn.dataset.row); UI.render(); },
+  unplace: (btn) => {
+    const c = btn.dataset.card;
+    for (const row of ROWS) UI.local.rows[row] = UI.local.rows[row].filter((x) => x !== c);
+    UI.render();
+  },
+};
+
+document.addEventListener("click", (ev) => {
+  const btn = ev.target.closest("[data-act]");
+  if (!btn || btn.disabled) return;
+  ACTIONS[btn.dataset.act]?.(btn);
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Enter") return;
+  if (ev.target.id === "code-input") { ev.preventDefault(); ACTIONS.join(); }
+  if (ev.target.id === "name-input") { ev.preventDefault(); normalizeCode(location.hash.slice(1)) ? ACTIONS.join() : $("code-input")?.focus(); }
+});
+
+// ---------- Start ----------
+function start() {
+  if (typeof Peer === "undefined") {
+    UI.fail("The connection library didn't load. Check your internet connection and refresh the page.");
+    return;
+  }
+  // Rejoin automatically after a refresh.
+  const session = Store.get(KEYS.session);
+  const name = Store.get(KEYS.name, "");
+  UI.render();
+  if (session?.code && name && normalizeCode(location.hash.slice(1)) === session.code) {
+    if (session.role === "host") {
+      const saved = Store.get(KEYS.host);
+      if (saved?.code === session.code) return Net.host(saved.code, saved.table);
+    } else {
+      return Net.join(session.code);
+    }
+  }
+  if (normalizeCode(location.hash.slice(1))) $(name ? "code-input" : "name-input")?.focus();
+}
+window.addEventListener("beforeunload", () => { try { Net.peer?.destroy(); } catch { /* closing anyway */ } });
+start();
+</script>
+</body>
+</html>
