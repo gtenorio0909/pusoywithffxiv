@@ -123,7 +123,7 @@ button:focus-visible, summary:focus-visible, input:focus-visible { outline: 3px 
 .card.black { color: var(--suit-black); }
 .card.sel { transform: translateY(-7px); outline: 3px solid var(--accent); outline-offset: 1px; }
 .card:disabled { cursor: default; }
-.card[data-act="pick"], .card[data-act="unplace"]:not(:disabled) { cursor: grab; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.card[data-act="pick"], .card[data-act="unplace"]:not(:disabled) { cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .card.dragging { opacity: 0.3; }
 .drag-ghost { position: fixed; left: 0; top: 0; z-index: 50; pointer-events: none; display: flex; gap: 4px; will-change: transform; }
 .drag-ghost .card { transform: rotate(-4deg); box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4); cursor: grabbing; }
@@ -134,6 +134,7 @@ button:focus-visible, summary:focus-visible, input:focus-visible { outline: 3px 
 .card.mini { --cw: 34px; border-radius: 5px; cursor: default; }
 .card.mini .r { font-size: 12px; top: 2px; left: 3px; }
 .card.mini .s { font-size: 14px; bottom: 2px; right: 3px; }
+.table a { color: var(--accent); font-weight: 700; }
 .slot { width: var(--cw); aspect-ratio: 5 / 7; border: 1.5px dashed rgba(230, 239, 236, 0.35); border-radius: 7px; flex: none; }
 
 .rows { display: flex; flex-direction: column; gap: 10px; }
@@ -211,7 +212,7 @@ details.rules li { margin-bottom: 4px; }
       <li>When 2 to 4 players are seated, anyone at the table can deal.</li>
       <li>Everyone gets 13 cards. Split them into a <b>Front</b> of 3 cards, a <b>Middle</b> of 5 and a <b>Back</b> of 5.</li>
       <li>The Back must be at least as strong as the Middle, and the Middle at least as strong as the Front. The table won't let you lock in a hand that breaks this.</li>
-      <li>Drag cards into a row. On a phone, press and hold a card for a moment, then drag. You can also tap cards to select them and press <b>Place</b>. Drop a card on a card in a full row to swap them. <b>Auto-arrange</b> suggests a strong split.</li>
+      <li>Drag cards from your hand into the Front, Middle or Back row. You can also tap cards to select them and press <b>Place</b>. Drop a card on a card in a full row to swap them.</li>
       <li>When everyone locks in, all hands are revealed and scored.</li>
     </ol>
     <ul>
@@ -329,47 +330,6 @@ function isComplete(arr) {
 function isFoul(arr) {
   const f = evaluateRow(arr.front), m = evaluateRow(arr.mid), b = evaluateRow(arr.back);
   return compareStrength(b, m) < 0 || compareStrength(m, f) < 0;
-}
-
-function combinations(items, k) {
-  const out = [];
-  const pick = (start, chosen) => {
-    if (chosen.length === k) { out.push(chosen.slice()); return; }
-    for (let i = start; i <= items.length - (k - chosen.length); i++) {
-      chosen.push(items[i]); pick(i + 1, chosen); chosen.pop();
-    }
-  };
-  pick(0, []);
-  return out;
-}
-
-// Rough value of one row, used only to rank auto-arrange candidates.
-const rowWeight = (strength) => strength[0] + (strength[1] || 0) / 15;
-
-// Tries every legal split of 13 cards and keeps the one with the best weighted total.
-function autoArrange(hand) {
-  const cards = sortCards(hand);
-  const fiveCache = new Map();
-  const eval5 = (combo) => {
-    const key = combo.join("");
-    if (!fiveCache.has(key)) fiveCache.set(key, evaluate5(combo));
-    return fiveCache.get(key);
-  };
-  let best = null;
-  for (const back of combinations(cards, 5)) {
-    const backStrength = eval5(back);
-    const restAfterBack = cards.filter((c) => !back.includes(c));
-    for (const mid of combinations(restAfterBack, 5)) {
-      const midStrength = eval5(mid);
-      if (compareStrength(backStrength, midStrength) < 0) continue;
-      const front = restAfterBack.filter((c) => !mid.includes(c));
-      const frontStrength = evaluate3(front);
-      if (compareStrength(midStrength, frontStrength) < 0) continue;
-      const score = rowWeight(backStrength) + rowWeight(midStrength) * 1.2 + rowWeight(frontStrength) * 1.5;
-      if (!best || score > best.score) best = { score, front, mid, back };
-    }
-  }
-  return { front: best.front, mid: best.mid, back: best.back };
 }
 
 // Moves cards into a row (or back to the hand, target "tray"). Dropping one card onto a card
@@ -966,7 +926,8 @@ function homeHtml(failMessage) {
           ${canResume ? `<button class="btn ghost" data-act="resume">Reopen table ${esc(saved.code)}</button>` : ""}
         </div>
       </div>
-    </div>`;
+    </div>
+    <p class="sub">Want to play cards out one turn at a time instead? <a href="dos.html">Play Pusoy Dos</a></p>`;
 }
 
 function roomBarHtml(v, code, confirm) {
@@ -1041,14 +1002,13 @@ function arrangingHtml(v) {
   const complete = isComplete(rows);
   const foul = complete && isFoul(rows);
   const lockedNames = r.locked.map((p) => nameOf(v, p));
-  return `<div><h2>Round ${r.n} · Arrange your hand</h2><p class="sub">Drag cards into the rows, or tap to select and press Place. Drag a card back to your hand to remove it.</p></div>
+  return `<div><h2>Round ${r.n} · Arrange your hand</h2><p class="sub">Drag cards from your hand into Front, Middle and Back. Drag a card back to your hand to take it out.</p></div>
     <div class="rows">${ROWS.map((row) => rowHtml(row, true)).join("")}</div>
     ${foul ? `<div class="notice">These rows are out of order. Back must be at least as strong as Middle, and Middle at least as strong as Front.</div>` : ""}
     <div class="drop-zone tray-zone" data-drop="tray"><div class="row-head"><span class="label">Your hand · ${tray.length} left</span></div>
       <div class="cards">${tray.map((c) => cardHtml(c, { act: "pick", selected: UI.local.selected.includes(c) })).join("") || `<span class="sub">All cards placed.</span>`}</div></div>
     <div class="actions">
       <button class="btn primary" data-act="lock" ${complete && !foul ? "" : "disabled"}>Lock in</button>
-      <button class="btn ghost" data-act="auto">Auto-arrange</button>
       <button class="btn ghost" data-act="clear" ${placed.length ? "" : "disabled"}>Clear rows</button>
     </div>
     ${lockedNames.length ? `<p class="sub">Locked in: ${esc(lockedNames.join(", "))}</p>` : ""}
@@ -1168,13 +1128,6 @@ const ACTIONS = {
   remove: (btn) => Net.send({ t: "remove", target: btn.dataset.target }),
   lock: () => Net.send({ t: "lock", arr: UI.local.rows }),
   unlock: () => Net.send({ t: "unlock" }),
-  auto: () => {
-    const hand = UI.view?.round?.hand;
-    if (!hand) return;
-    UI.local.rows = autoArrange(hand);
-    UI.local.selected = [];
-    UI.render();
-  },
   clear: () => { UI.local.rows = { front: [], mid: [], back: [] }; UI.local.selected = []; UI.render(); },
   pick: (btn) => {
     const c = btn.dataset.card, sel = UI.local.selected;
@@ -1186,11 +1139,10 @@ const ACTIONS = {
 };
 
 // ---------- Drag and drop (mouse, pen and touch via Pointer Events) ----------
-// Mouse/pen: drag starts after a small movement. Touch: press and hold briefly, so a quick
-// swipe still scrolls the page. A tap with no drag falls through to the normal click actions.
-const DRAG_MOUSE_PX = 5;
-const DRAG_TOUCH_HOLD_MS = 180;
-const DRAG_TOUCH_SLOP_PX = 8;
+// A drag starts once the pointer moves a few pixels from where it pressed a card; a press with
+// no movement is a tap and falls through to the normal click actions. Cards use
+// `touch-action: none`, so on phones the drag starts immediately instead of scrolling the page.
+const DRAG_START_PX = { mouse: 5, pen: 5, touch: 8 };
 const DRAG_EDGE_PX = 70;       // auto-scroll when dragging this close to the top or bottom
 const DRAG_SCROLL_SPEED = 14;  // pixels per frame at the very edge
 
@@ -1205,12 +1157,11 @@ const Drag = {
     const cards = el.dataset.act === "pick" && UI.local.selected.includes(card) ? [...UI.local.selected] : [card];
     const rect = el.getBoundingClientRect();
     this.state = {
-      pointerId: ev.pointerId, touch: ev.pointerType === "touch", active: false,
+      pointerId: ev.pointerId, threshold: DRAG_START_PX[ev.pointerType] ?? 5, active: false,
       x0: ev.clientX, y0: ev.clientY, x: ev.clientX, y: ev.clientY,
       dx: ev.clientX - rect.left, dy: ev.clientY - rect.top,
-      cards, ghost: null, holdTimer: null, over: null,
+      cards, ghost: null, over: null,
     };
-    if (this.state.touch) this.state.holdTimer = setTimeout(() => this.start(), DRAG_TOUCH_HOLD_MS);
   },
 
   start() {
@@ -1246,10 +1197,8 @@ const Drag = {
     const st = this.state;
     if (!st || ev.pointerId !== st.pointerId) return;
     st.x = ev.clientX; st.y = ev.clientY;
-    const dist = Math.hypot(st.x - st.x0, st.y - st.y0);
     if (!st.active) {
-      if (st.touch && dist > DRAG_TOUCH_SLOP_PX) this.cancel(); // finger moved first: it's a scroll
-      else if (!st.touch && dist > DRAG_MOUSE_PX) this.start();
+      if (Math.hypot(st.x - st.x0, st.y - st.y0) > st.threshold) this.start();
       return;
     }
     this.follow();
@@ -1299,7 +1248,6 @@ const Drag = {
   cleanup() {
     const st = this.state;
     if (!st) return;
-    clearTimeout(st.holdTimer);
     st.ghost?.remove();
     st.over?.classList.remove("drop-over", "drop-bad");
     this.state = null;
@@ -1312,7 +1260,7 @@ document.addEventListener("pointerup", (ev) => Drag.end(ev));
 document.addEventListener("pointercancel", () => Drag.cancel());
 // While a touch drag is active, stop the page from scrolling under the finger.
 document.addEventListener("touchmove", (ev) => { if (Drag.state?.active) ev.preventDefault(); }, { passive: false });
-// Long-press on a card shouldn't open the phone's context menu.
+// Pressing on a card shouldn't open the phone's long-press menu.
 document.addEventListener("contextmenu", (ev) => { if (ev.target.closest(".card[data-card]")) ev.preventDefault(); });
 
 document.addEventListener("click", (ev) => {
