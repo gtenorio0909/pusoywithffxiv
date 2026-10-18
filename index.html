@@ -111,14 +111,20 @@ button:focus-visible, summary:focus-visible, input:focus-visible { outline: 3px 
 .join-row .field { flex: 1; min-width: 0; }
 
 /* Cards */
+/* Card size: --cw is the chosen width; each card's own --w can shrink it (mini cards).
+   Rows marked .fit overlap their cards when the chosen size is too wide to fit side by side. */
+:root[data-card-size="large"] { --cw: 64px; }
+:root[data-card-size="xl"] { --cw: 80px; }
 .card {
-  width: var(--cw); aspect-ratio: 5 / 7; max-width: 100%; position: relative; flex: none;
+  --w: var(--cw);
+  width: var(--w); aspect-ratio: 5 / 7; max-width: 100%; position: relative; flex: none;
   background: var(--card); border: 1px solid var(--card-line); border-radius: 7px;
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.18); padding: 0; cursor: pointer;
   font-family: var(--font-display); font-weight: 800; transition: transform 0.12s ease;
 }
-.card .r { position: absolute; top: 3px; left: 5px; font-size: 15px; line-height: 1; }
-.card .s { position: absolute; bottom: 4px; right: 5px; font-size: 20px; line-height: 1; }
+.card .r { position: absolute; top: 6%; left: 9%; font-size: calc(var(--w) * 0.32); line-height: 1; display: flex; flex-direction: column; align-items: center; }
+.card .r i { font-style: normal; font-size: 0.78em; margin-top: 1px; }
+.card .s { position: absolute; bottom: 6%; right: 9%; font-size: calc(var(--w) * 0.44); line-height: 1; }
 .card.red { color: var(--suit-red); }
 .card.black { color: var(--suit-black); }
 .card.sel { transform: translateY(-7px); outline: 3px solid var(--accent); outline-offset: 1px; }
@@ -131,13 +137,15 @@ button:focus-visible, summary:focus-visible, input:focus-visible { outline: 3px 
 .drop-over { border-color: var(--accent) !important; background-color: rgba(217, 154, 30, 0.14) !important; }
 .drop-bad { border-color: var(--bad) !important; background-color: rgba(184, 53, 42, 0.18) !important; }
 .tray-zone { padding: 8px; margin: -8px; }
-.card.mini { --cw: 34px; border-radius: 5px; cursor: default; }
-.card.mini .r { font-size: 12px; top: 2px; left: 3px; }
-.card.mini .s { font-size: 14px; bottom: 2px; right: 3px; }
+.card.mini { --w: calc(var(--cw) * 0.74); border-radius: 5px; cursor: default; }
 .table a { color: var(--accent); font-weight: 700; }
-.slot { width: var(--cw); aspect-ratio: 5 / 7; border: 1.5px dashed rgba(230, 239, 236, 0.35); border-radius: 7px; flex: none; }
+.slot { --w: var(--cw); width: var(--w); aspect-ratio: 5 / 7; border: 1.5px dashed rgba(230, 239, 236, 0.35); border-radius: 7px; flex: none; }
 
 .rows { display: flex; flex-direction: column; gap: 10px; }
+.row, .mini-row { container-type: inline-size; }
+.cards.fit { flex-wrap: nowrap; gap: 0; }
+.cards.fit > * + * { margin-left: min(6px, calc((100cqw - var(--n) * var(--w)) / (var(--n) - 1))); }
+.cards.fit > .card + .card { box-shadow: -3px 0 6px rgba(0, 0, 0, 0.16), 0 2px 0 rgba(0, 0, 0, 0.18); }
 .row { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.18); border: 2px solid transparent; }
 .row.target { border-color: var(--accent); }
 .row-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; }
@@ -162,7 +170,14 @@ button:focus-visible, summary:focus-visible, input:focus-visible { outline: 3px 
 .delta.up { color: #7fdca6; } .delta.down { color: #ff9a90; } .delta.even { color: var(--on-felt-muted); }
 .mini-row { display: flex; flex-direction: column; gap: 3px; }
 .mini-row .cap { font-size: 12px; color: var(--on-felt-muted); }
-.mini-row .cards { min-height: 0; gap: 4px; }
+.mini-row .cards { min-height: 0; }
+.mini-row .cards.fit > * + * { margin-left: min(4px, calc((100cqw - var(--n) * var(--w)) / (var(--n) - 1))); }
+.size-control { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; color: var(--on-felt-muted); }
+.size-control .label { font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.size-control .seg { display: inline-flex; border: 1px solid rgba(230, 239, 236, 0.35); border-radius: 10px; overflow: hidden; }
+.size-control button { background: transparent; border: 0; color: var(--on-felt); padding: 6px 12px; min-height: 36px; cursor: pointer; font-weight: 700; }
+.size-control button + button { border-left: 1px solid rgba(230, 239, 236, 0.35); }
+.size-control button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 .matchups { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
 .matchup { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 8px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.15); }
 .matchup .vs { font-weight: 700; min-width: 0; }
@@ -549,7 +564,7 @@ const Store = {
   set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable */ } },
   remove(key) { try { localStorage.removeItem(key); } catch { /* storage unavailable */ } },
 };
-const KEYS = { token: "pusoy.token", name: "pusoy.name", host: "pusoy.host", session: "pusoy.session" };
+const KEYS = { token: "pusoy.token", name: "pusoy.name", host: "pusoy.host", session: "pusoy.session", cardSize: "pusoy.cardSize" };
 const HOST_SAVE_HOURS = 24;
 
 function deviceToken() {
@@ -810,6 +825,14 @@ const UI = {
   lastNotice: 0,
   local: { key: "", rows: { front: [], mid: [], back: [] }, selected: [] },
   toastTimer: null,
+  cardSize: "normal",
+
+  // Applies a card size to the page and remembers it on this device.
+  setCardSize(size) {
+    this.cardSize = CARD_SIZES.some(([id]) => id === size) ? size : "normal";
+    document.documentElement.dataset.cardSize = this.cardSize;
+    Store.set(KEYS.cardSize, this.cardSize);
+  },
 
   name() { return cleanName($("name-input")?.value ?? Store.get(KEYS.name, ""), "Player"); },
 
@@ -894,7 +917,8 @@ function cardHtml(card, { act, selected, mini, disabled } = {}) {
   const dragging = !mini && act !== "none" && Drag.state?.active && Drag.state.cards.includes(card);
   const cls = ["card", isRed(card) ? "red" : "black", selected ? "sel" : "", mini ? "mini" : "", dragging ? "dragging" : ""].join(" ");
   const label = `${rankLabel(card)} of ${SUIT_NAME[card[1]]}`;
-  const inner = `<span class="r">${rankLabel(card)}</span><span class="s">${SUIT_SYMBOL[card[1]]}</span>`;
+  // Rank and suit sit together in the top-left corner so they stay visible when cards overlap.
+  const inner = `<span class="r">${rankLabel(card)}<i>${SUIT_SYMBOL[card[1]]}</i></span><span class="s" aria-hidden="true">${SUIT_SYMBOL[card[1]]}</span>`;
   if (mini) return `<span class="${cls}" role="img" aria-label="${label}">${inner}</span>`;
   return `<button class="${cls}" data-act="${act}" data-card="${card}" aria-label="${label}" aria-pressed="${selected ? "true" : "false"}" ${disabled ? "disabled" : ""}>${inner}</button>`;
 }
@@ -980,7 +1004,7 @@ function rowHtml(row, interactive) {
   const strength = cards.length === ROW_SIZE[row] ? evaluateRow(cards) : null;
   const slots = Array.from({ length: ROW_SIZE[row] - cards.length }, () => `<span class="slot" aria-hidden="true"></span>`).join("");
   const head = `<div class="row-head"><span class="label">${ROW_LABEL[row]} · ${ROW_SIZE[row]} cards</span><span class="hand">${strength ? handName(strength) : `${cards.length}/${ROW_SIZE[row]}`}</span></div>`;
-  const body = `<div class="cards">${cards.map((c) => cardHtml(c, { act: "unplace", disabled: !interactive })).join("")}${slots}</div>`;
+  const body = `<div class="cards fit" style="--n: ${ROW_SIZE[row]}">${cards.map((c) => cardHtml(c, { act: "unplace", disabled: !interactive })).join("")}${slots}</div>`;
   if (!interactive) return `<div class="row">${head}${body}</div>`;
   const fits = Math.min(UI.local.selected.length, ROW_SIZE[row] - cards.length);
   return `<div class="row ${fits ? "target" : ""}" data-drop="${row}">${head}${body}
@@ -992,6 +1016,7 @@ function arrangingHtml(v) {
   const waiting = r.players.filter((p) => !isLocked(v, p));
   if (isLocked(v, v.you)) {
     return `<div><h2>Round ${r.n} · Locked in</h2><p class="sub">Waiting for ${esc(waiting.map((p) => nameOf(v, p)).join(", "))}.</p></div>
+      ${sizeControlHtml()}
       <div class="rows">${ROWS.map((row) => rowHtml(row, false)).join("")}</div>
       <div class="actions"><button class="btn ghost" data-act="unlock">Change my hand</button></div>
       ${redealHtml()}`;
@@ -1003,6 +1028,7 @@ function arrangingHtml(v) {
   const foul = complete && isFoul(rows);
   const lockedNames = r.locked.map((p) => nameOf(v, p));
   return `<div><h2>Round ${r.n} · Arrange your hand</h2><p class="sub">Drag cards from your hand into Front, Middle and Back. Drag a card back to your hand to take it out.</p></div>
+    ${sizeControlHtml()}
     <div class="rows">${ROWS.map((row) => rowHtml(row, true)).join("")}</div>
     ${foul ? `<div class="notice">These rows are out of order. Back must be at least as strong as Middle, and Middle at least as strong as Front.</div>` : ""}
     <div class="drop-zone tray-zone" data-drop="tray"><div class="row-head"><span class="label">Your hand · ${tray.length} left</span></div>
@@ -1036,6 +1062,15 @@ function resetHtml() {
   return `<div class="actions"><button class="btn quiet" data-act="reset">Reset scores</button></div>`;
 }
 
+const CARD_SIZES = [["normal", "Normal"], ["large", "Large"], ["xl", "Extra large"]];
+
+function sizeControlHtml() {
+  const current = UI.cardSize;
+  const buttons = CARD_SIZES.map(([id, label]) =>
+    `<button data-act="card-size" data-size="${id}" aria-pressed="${id === current}">${label}</button>`).join("");
+  return `<div class="size-control" role="group" aria-label="Card size"><span class="label">Card size</span><span class="seg">${buttons}</span></div>`;
+}
+
 function showdownHtml(v) {
   const r = v.round;
   const { points, matchups } = r.result;
@@ -1043,7 +1078,7 @@ function showdownHtml(v) {
     const arr = r.reveals[p];
     const d = points[p];
     const rows = ROWS.map((row) => `<div class="mini-row"><span class="cap">${ROW_LABEL[row]} · ${handName(evaluateRow(arr[row]))}</span>
-      <div class="cards">${arr[row].map((c) => cardHtml(c, { mini: true })).join("")}</div></div>`).join("");
+      <div class="cards fit" style="--n: ${ROW_SIZE[row]}">${arr[row].map((c) => cardHtml(c, { mini: true })).join("")}</div></div>`).join("");
     return `<div class="player"><div class="player-head"><span class="nm">${esc(nameOf(v, p))}</span>
       <span class="delta ${d > 0 ? "up" : d < 0 ? "down" : "even"}">${d > 0 ? "+" : ""}${d}</span></div>${rows}</div>`;
   }).join("");
@@ -1056,6 +1091,7 @@ function showdownHtml(v) {
     return `<div class="matchup"><span class="vs">${esc(nameOf(v, m.a))} vs ${esc(nameOf(v, m.b))}</span>${chips}<span class="chip">${result}</span></div>`;
   }).join("");
   return `<div><h2>Round ${r.n} · Showdown</h2><p class="sub">Points are added to the scoreboard.</p></div>
+    ${sizeControlHtml()}
     <div class="board">${panels}</div>
     <div class="matchups">${ups}</div>
     <div class="actions"><button class="btn primary" data-act="deal" ${v.players.length >= 2 ? "" : "disabled"}>Deal round ${v.nextRound}</button></div>
@@ -1136,6 +1172,7 @@ const ACTIONS = {
   },
   place: (btn) => { placeSelected(btn.dataset.row); UI.render(); },
   unplace: (btn) => { moveCards([btn.dataset.card], "tray"); UI.render(); },
+  "card-size": (btn) => { UI.setCardSize(btn.dataset.size); UI.render(); },
 };
 
 // ---------- Drag and drop (mouse, pen and touch via Pointer Events) ----------
@@ -1277,6 +1314,7 @@ document.addEventListener("keydown", (ev) => {
 
 // ---------- Start ----------
 function start() {
+  UI.setCardSize(Store.get(KEYS.cardSize, "normal"));
   if (typeof Peer === "undefined") {
     UI.fail("The connection library didn't load. Check your internet connection and refresh the page.");
     return;
